@@ -1,10 +1,13 @@
-#include "include/print.h"
-#include "include/thrower.h"
-
+#include <print>
+#include <format>
 #include <algorithm>
-
+#include <ranges>
 #include <filesystem>
 namespace fs=std::filesystem;
+
+#include "include/thrower.h"
+#include "include/args.h"
+
 
 
 std::string pretty(int64_t  size)
@@ -30,9 +33,8 @@ std::string pretty(int64_t  size)
 
 int64_t size(fs::path   const &path)
 {
-    int64_t size{};
-
-    std::error_code  ec{};
+    auto size = int64_t{};
+    auto ec   = std::error_code {};
 
     for(auto entry : fs::directory_iterator{path,ec})
     {
@@ -53,18 +55,19 @@ int64_t size(fs::path   const &path)
 
 
 
-int main()
+int main(int argc, char **argv)
 try
 {
+    auto const args = Args{argc,argv};
+
     struct SubDir
     {
-        fs::path        name;
-        int64_t         size;
+        fs::path        name{};
+        int64_t         size{};
         auto length() const {return name.string().length();}
     };
 
-    std::vector<SubDir>     subDirs;
-
+    auto subDirs = std::vector<SubDir>{};
 
     for(auto subDir : fs::directory_iterator{fs::current_path()})
     {
@@ -76,18 +79,34 @@ try
 
     std::ranges::sort(subDirs,std::greater{}, &SubDir::size);
 
+
+    if(not args.contains("-all"))
+    {
+        if(subDirs.size() > 10)
+        {
+            auto remainingCount = subDirs.size()-10;
+            auto remainingSize  = std::ranges::fold_left(subDirs | std::views::drop(10) | std::views::transform(&SubDir::size), 
+                                                         0ull, 
+                                                         std::plus<>{});
+
+            subDirs.resize(10);
+
+            subDirs.emplace_back(std::format("Remaining {}...",remainingCount), remainingSize);
+        }
+    }
+
     auto maxLen = std::ranges::max_element(subDirs,{}, &SubDir::length)->name.string().length();
 
 
     for(auto const &subDir : subDirs)
     {
-        print("{:{}} : {}\n",subDir.name.string(), maxLen, pretty(subDir.size));
+        std::print("{:{}} : {}\n",subDir.name.string(), maxLen, pretty(subDir.size));
     }
 
 }
 catch(std::exception const &e)
 {
-    print("{}",e.what());
+    std::print("{}",e.what());
 }
 
 
